@@ -17,14 +17,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1️⃣ Checkout Tailscale source
+    # 1️⃣ Checkout 官方 Tailscale 源码
     - name: Checkout Tailscale
       uses: actions/checkout@v4
       with:
         repository: tailscale/tailscale
         ref: ${{ github.event.inputs.version }}
 
-    # 2️⃣ Install legacy Go
+    # 2️⃣ 安装 legacy Go
     - name: Install Legacy Go
       run: |
         curl -L -o go.tar.gz \
@@ -34,13 +34,13 @@ jobs:
         echo "GOROOT=$HOME/custom_go" >> $GITHUB_ENV
         echo "PATH=$HOME/custom_go/bin:$PATH" >> $GITHUB_ENV
 
-    # 3️⃣ Verify Go
+    # 3️⃣ 验证 Go
     - name: Verify Go
       run: |
         which go
         go version
 
-    # 4️⃣ Set clean version (去掉 v 前缀)
+    # 4️⃣ 设置纯数字版本（去掉 v 前缀）
     - name: Set VERSION
       id: set_version
       run: |
@@ -48,7 +48,7 @@ jobs:
         VERSION=${VERSION_RAW#v}
         echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
-    # 5️⃣ Build binaries
+    # 5️⃣ 编译二进制
     - name: Build binaries
       run: |
         mkdir -p dist
@@ -56,7 +56,6 @@ jobs:
         export CGO_ENABLED=0
         export GOOS=linux
         export GOARCH=${{ github.event.inputs.arch }}
-        VERSION=${VERSION}
 
         LDFLAGS="-s -w \
           -X tailscale.com/version.Long=${VERSION} \
@@ -68,7 +67,7 @@ jobs:
         echo "Building tailscale CLI..."
         go build -v -ldflags="$LDFLAGS" -o dist/tailscale ./cmd/tailscale
 
-    # 6️⃣ Build DEB package
+    # 6️⃣ 构建 DEB 包
     - name: Build DEB
       run: |
         mkdir -p pkg/{DEBIAN,usr/bin,usr/sbin,lib/systemd/system,etc/default}
@@ -113,19 +112,20 @@ jobs:
 
         dpkg-deb --build pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
 
-    # 7️⃣ Upload artifact
+    # 7️⃣ 上传 artifact
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: tailscale-deb
-        path: tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
+        path: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}.deb
 
-    # 8️⃣ Create GitHub Release
+    # 8️⃣ 创建 Release（workflow 所在仓库）
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
+        repository: ${{ github.repository }}        # ⚡ 自动使用当前仓库
         tag_name: ${{ github.event.inputs.version }}
         name: Tailscale ${{ github.event.inputs.version }}
-        files: tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
+        files: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}.deb
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
