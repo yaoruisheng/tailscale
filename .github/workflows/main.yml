@@ -1,56 +1,117 @@
-name: Build Tailscale with Custom Go
+name: Build Tailscale 1.94 DEB (Legacy Go)
 
 on:
-  workflow_dispatch: # 手动点击运行
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      VERSION: 1.94.2-legacy
+      ARCH: arm64
+
     steps:
-      # 1. 环境准备：拉取 Tailscale 官方源码
-      - name: Checkout Tailscale Source
-        uses: actions/checkout@v4
-        with:
-          repository: tailscale/tailscale
-          ref: main # 你也可以指定标签，如 v1.58.2
+    # 1️⃣ Checkout Tailscale
+    - name: Checkout Tailscale
+      uses: actions/checkout@v4
+      with:
+        repository: tailscale/tailscale
+        ref: v1.94.2
 
-      # 2. 下载并安装你自定义的 Go
-      - name: Install Custom Go
-        run: |
-          # 下载你的 Release 压缩包
-          curl -L -O https://github.com/yaoruisheng/go/releases/download/go-legacy-amd64-14/go-legacy-amd64.tar.gz
-          
-          # 创建一个目录并解压
-          mkdir -p $HOME/custom_go
-          tar -xzf go-legacy-amd64.tar.gz -C $HOME/custom_go --strip-components=1
-          
-          # 设置环境变量：将你的 Go 路径加入系统 PATH，并设置 GOROOT
-          echo "$HOME/custom_go/bin" >> $GITHUB_PATH
-          echo "GOROOT=$HOME/custom_go" >> $GITHUB_ENV
+    # 2️⃣ Install legacy Go
+    - name: Install Legacy Go
+      run: |
+        curl -L -o go.tar.gz \
+          https://github.com/yaoruisheng/go/releases/download/go-legacy-amd64-14/go-legacy-amd64.tar.gz
+        mkdir -p $HOME/custom_go
+        tar -xzf go.tar.gz -C $HOME/custom_go --strip-components=1
+        echo "GOROOT=$HOME/custom_go" >> $GITHUB_ENV
+        echo "PATH=$HOME/custom_go/bin:$PATH" >> $GITHUB_ENV
 
-      # 3. 验证 Go 版本（确保输出是你自定义的版本）
-      - name: Verify Go
-        run: |
-          go version
-          go env
+    # 3️⃣ Verify Go
+    - name: Verify Go
+      run: |
+        which go
+        go version
 
-      # 4. 编译 Tailscale (tailscaled 和 tailscale)
-      - name: Build Tailscale
-        run: |
-          mkdir -p dist
-          # 禁用 CGO 以获得更好的兼容性，或者根据需要开启
-          export CGO_ENABLED=0 
-          export GOOS=linux
-          export GOARCH=arm64
-          echo "Building tailscaled..."
-          go build -v -ldflags="-s -w" -o dist/tailscaled ./cmd/tailscaled
-          
-          echo "Building tailscale CLI..."
-          go build -v -ldflags="-s -w" -o dist/tailscale ./cmd/tailscale
+    # 4️⃣ Build binaries (直接 go build)
+    - name: Build binaries
+      run: |
+        mkdir -p dist
 
-      # 5. 上传编译好的二进制文件
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: tailscale-custom-go-bin
-          path: dist/
+        export CGO_ENABLED=0
+        export GOOS=linux
+        export GOARCH=${ARCH}
+
+        LDFLAGS="-s -w \
+          -X tailscale.com/version.Long=${VERSION} \
+          -X tailscale.com/version.Short=${VERSION}"
+
+        echo "Building tailscaled..."
+        go build -v -ldflags="$LDFLAGS" -o dist/tailscaled ./cmd/tailscaled
+
+        echo "Building tailscale CLI..."
+        go build -v -ldflags="$LDFLAGS" -o dist/tailscale ./cmd/tailscale
+
+    # 5️⃣ Build DEB package
+    - name: Build DEB
+      run: |
+        mkdir -p pkg/{DEBIAN,usr/bin,usr/sbin,lib/systemd/system,etc/default}
+
+        # Binaries
+        cp dist/tailscale pkg/usr/bin/
+        cp dist/tailscaled pkg/usr/sbin/
+        chmod 755 pkg/usr/bin/tailscale
+        chmod 755 pkg/usr/sbin/tailscaled
+
+        # systemd service
+        cp cmd/tailscaled/tailscaled.service pkg/lib/systemd/system/
+
+        # defaults file
+        cp cmd/tailscaled/tailscaled.defaults pkg/etc/default/tailscaled
+
+        # maintainer scripts
+        cp release/deb/debian.postinst.sh pkg/DEBIAN/postinst
+        cp release/deb/debian.prerm.sh pkg/DEBIAN/prerm
+        cp release/deb/debian.postrm.sh pkg/DEBIAN/postrm
+        chmod 755 pkg/DEBIAN/*
+
+        # calculate installed size
+        SIZE=$(du -sk pkg | cut -f1)
+
+        cat <<EOF > pkg/DEBIAN/control
+        Package: tailscale
+        Version: ${VERSION}
+        Section: net
+        Priority: extra
+        Architecture: ${ARCH}
+        Maintainer: Legacy Build <you@example.com>
+        Installed-Size: ${SIZE}
+        Replaces: tailscale-relay
+        Conflicts: tailscale-relay
+        Depends: iptables
+        Recommends: iproute2
+        Homepage: https://tailscale.com
+        Description: Tailscale legacy build
+         Built with legacy Go toolchain for kernel 4.4 devices.
+        EOF
+
+        dpkg-deb --build pkg tailscale_${VERSION}_${ARCH}.deb
+
+    # 6️⃣ Upload artifact
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tailscale-deb
+        path: tailscale_${{ env.VERSION }}_${{ env.ARCH }}.deb
+
+    # 7️⃣ Create GitHub Release
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: tailscale-${{ env.VERSION }}
+        name: Tailscale ${{ env.VERSION }}
+        files: tailscale_${{ env.VERSION }}_${{ env.ARCH }}.deb
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
