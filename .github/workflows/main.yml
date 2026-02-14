@@ -110,7 +110,7 @@ jobs:
          Built with legacy Go toolchain for kernel 4.4 devices.
         EOF
 
-        dpkg-deb --build pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
+        dpkg-deb --build -Zgzip pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
 
     # 7️⃣ 上传 artifact
     - name: Upload Artifact
