@@ -18,7 +18,7 @@ jobs:
       - name: Install Custom Go
         run: |
           # 下载你的 Release 压缩包
-          curl -L -O https://github.com/yaoruisheng/go/releases/download/go-legacy-amd64-13/go-legacy-amd64.tar.gz
+          curl -L -O https://github.com/yaoruisheng/go/releases/download/go-legacy-amd64-14/go-legacy-amd64.tar.gz
           
           # 创建一个目录并解压
           mkdir -p $HOME/custom_go
