@@ -40,7 +40,15 @@ jobs:
         which go
         go version
 
-    # 4️⃣ Build binaries
+    # 4️⃣ Set clean version (去掉 v 前缀)
+    - name: Set VERSION
+      id: set_version
+      run: |
+        VERSION_RAW=${{ github.event.inputs.version }}
+        VERSION=${VERSION_RAW#v}
+        echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+    # 5️⃣ Build binaries
     - name: Build binaries
       run: |
         mkdir -p dist
@@ -48,8 +56,7 @@ jobs:
         export CGO_ENABLED=0
         export GOOS=linux
         export GOARCH=${{ github.event.inputs.arch }}
-
-        VERSION=${{ github.event.inputs.version }}
+        VERSION=${VERSION}
 
         LDFLAGS="-s -w \
           -X tailscale.com/version.Long=${VERSION} \
@@ -61,7 +68,7 @@ jobs:
         echo "Building tailscale CLI..."
         go build -v -ldflags="$LDFLAGS" -o dist/tailscale ./cmd/tailscale
 
-    # 5️⃣ Build DEB package
+    # 6️⃣ Build DEB package
     - name: Build DEB
       run: |
         mkdir -p pkg/{DEBIAN,usr/bin,usr/sbin,lib/systemd/system,etc/default}
@@ -106,19 +113,19 @@ jobs:
 
         dpkg-deb --build pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
 
-    # 6️⃣ Upload artifact
+    # 7️⃣ Upload artifact
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: tailscale-deb
-        path: tailscale_${{ github.event.inputs.version }}_${{ github.event.inputs.arch }}.deb
+        path: tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
 
-    # 7️⃣ Create GitHub Release
+    # 8️⃣ Create GitHub Release
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.event.inputs.version }}
         name: Tailscale ${{ github.event.inputs.version }}
-        files: tailscale_${{ github.event.inputs.version }}_${{ github.event.inputs.arch }}.deb
+        files: tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
