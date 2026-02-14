@@ -99,7 +99,7 @@ jobs:
         Section: net
         Priority: extra
         Architecture: ${{ github.event.inputs.arch }}
-        Maintainer: Legacy Build <you@example.com>
+        Maintainer: Legacy Build <https://github.com/${{ github.repository }}>
         Installed-Size: ${SIZE}
         Replaces: tailscale-relay
         Conflicts: tailscale-relay
