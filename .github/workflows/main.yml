@@ -1,23 +1,28 @@
-name: Build Tailscale 1.94 DEB (Legacy Go)
+name: Build Tailscale DEB (Legacy Go)
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tailscale version (e.g., v1.94.2)'
+        required: true
+        default: 'v1.94.2'
+      arch:
+        description: 'Architecture'
+        required: true
+        default: 'arm64'
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      VERSION: 1.94.2-legacy
-      ARCH: arm64
-
     steps:
-    # 1️⃣ Checkout Tailscale
+    # 1️⃣ Checkout Tailscale source
     - name: Checkout Tailscale
       uses: actions/checkout@v4
       with:
         repository: tailscale/tailscale
-        ref: v1.94.2
+        ref: ${{ github.event.inputs.version }}
 
     # 2️⃣ Install legacy Go
     - name: Install Legacy Go
@@ -35,14 +40,16 @@ jobs:
         which go
         go version
 
-    # 4️⃣ Build binaries (直接 go build)
+    # 4️⃣ Build binaries
     - name: Build binaries
       run: |
         mkdir -p dist
 
         export CGO_ENABLED=0
         export GOOS=linux
-        export GOARCH=${ARCH}
+        export GOARCH=${{ github.event.inputs.arch }}
+
+        VERSION=${{ github.event.inputs.version }}
 
         LDFLAGS="-s -w \
           -X tailscale.com/version.Long=${VERSION} \
@@ -85,7 +92,7 @@ jobs:
         Version: ${VERSION}
         Section: net
         Priority: extra
-        Architecture: ${ARCH}
+        Architecture: ${{ github.event.inputs.arch }}
         Maintainer: Legacy Build <you@example.com>
         Installed-Size: ${SIZE}
         Replaces: tailscale-relay
@@ -97,21 +104,21 @@ jobs:
          Built with legacy Go toolchain for kernel 4.4 devices.
         EOF
 
-        dpkg-deb --build pkg tailscale_${VERSION}_${ARCH}.deb
+        dpkg-deb --build pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
 
     # 6️⃣ Upload artifact
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: tailscale-deb
-        path: tailscale_${{ env.VERSION }}_${{ env.ARCH }}.deb
+        path: tailscale_${{ github.event.inputs.version }}_${{ github.event.inputs.arch }}.deb
 
     # 7️⃣ Create GitHub Release
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: tailscale-${{ env.VERSION }}
-        name: Tailscale ${{ env.VERSION }}
-        files: tailscale_${{ env.VERSION }}_${{ env.ARCH }}.deb
+        tag_name: ${{ github.event.inputs.version }}
+        name: Tailscale ${{ github.event.inputs.version }}
+        files: tailscale_${{ github.event.inputs.version }}_${{ github.event.inputs.arch }}.deb
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
