@@ -47,6 +47,11 @@ jobs:
         VERSION_RAW=${{ github.event.inputs.version }}
         VERSION=${VERSION_RAW#v}
         echo "VERSION=${VERSION}" >> $GITHUB_ENV
+        # 同步覆盖 mkversion 输出，确保二进制不会带 -dev
+        export VERSION_SHORT=${VERSION}
+        export VERSION_LONG=${VERSION}
+        echo "VERSION_SHORT=${VERSION_SHORT}" >> $GITHUB_ENV
+        echo "VERSION_LONG=${VERSION_LONG}" >> $GITHUB_ENV
 
     # 5️⃣ 编译二进制
     - name: Build binaries
