@@ -17,20 +17,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1️⃣ Checkout 官方 Tailscale 源码到当前目录
+    # 1. Checkout 官方 Tailscale 源码到当前目录
     - name: Checkout Tailscale
       uses: actions/checkout@v4
       with:
         repository: tailscale/tailscale
         ref: ${{ github.event.inputs.version }}
 
-    # 2️⃣ 检出你自己的仓库到临时目录 (用于获取补丁文件)
+    # 2. 检出你自己的仓库到临时目录 (用于获取补丁文件)
     - name: Checkout custom patches
       uses: actions/checkout@v4
       with:
         path: tmp_patches
 
-    # 3️⃣ 应用补丁 (在 Tailscale 源码根目录下执行)
+    # 3. 应用补丁 (在 Tailscale 源码根目录下执行)
     - name: Apply Patches
       run: |
         echo "Applying custom patches..."
@@ -42,7 +42,7 @@ jobs:
         rm -rf tmp_patches
         echo "Patches applied successfully."
 
-    # 4️⃣ 安装 legacy Go
+    # 4. 安装 legacy Go
     - name: Install Legacy Go
       run: |
         curl -L -o go.tar.gz \
@@ -52,13 +52,13 @@ jobs:
         echo "GOROOT=$HOME/custom_go" >> $GITHUB_ENV
         echo "PATH=$HOME/custom_go/bin:$PATH" >> $GITHUB_ENV
 
-    # 5️⃣ 验证 Go
+    # 5. 验证 Go
     - name: Verify Go
       run: |
         which go
         go version
 
-    # 6️⃣ 设置纯数字版本
+    # 6. 设置纯数字版本
     - name: Set VERSION
       id: set_version
       run: |
@@ -68,7 +68,7 @@ jobs:
         echo "VERSION_SHORT=${VERSION}" >> $GITHUB_ENV
         echo "VERSION_LONG=${VERSION}" >> $GITHUB_ENV
 
-    # 7️⃣ 编译二进制
+    # 7. 编译二进制
     - name: Build binaries
       run: |
         mkdir -p dist
@@ -86,7 +86,7 @@ jobs:
         echo "Building tailscale CLI..."
         go build -v -ldflags="$LDFLAGS" -o dist/tailscale ./cmd/tailscale
 
-    # 8️⃣ 构建 DEB 包
+    # 8. 构建 DEB 包
     - name: Build DEB
       run: |
         mkdir -p pkg/{DEBIAN,usr/bin,usr/sbin,lib/systemd/system,etc/default}
@@ -124,21 +124,21 @@ jobs:
           Built with legacy Go toolchain for kernel 4.4 devices and custom patches.
         EOF
 
-        dpkg-deb --build -Zgzip pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}.deb
+        dpkg-deb --build -Zgzip pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}_patched.deb
 
-    # 9️⃣ 上传 artifact
+    # 9. 上传 artifact
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: tailscale-deb
-        path: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}.deb
+        path: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}_patched.deb
 
-    # 🔟 创建 Release
+    # 10. 创建 Release
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ github.event.inputs.version }}
         name: Tailscale ${{ github.event.inputs.version }} (Patched)
-        files: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}.deb
+        files: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}_patched.deb
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
