@@ -1,5 +1,5 @@
 diff --git a/control/controlhttp/client.go b/control/controlhttp/client.go
-index 06a2131fd..87ece53f8 100644
+index 06a2131fd..826666b15 100644
 --- a/control/controlhttp/client.go
 +++ b/control/controlhttp/client.go
 @@ -36,6 +36,7 @@
@@ -18,7 +18,7 @@ index 06a2131fd..87ece53f8 100644
  	"tailscale.com/syncs"
  	"tailscale.com/tailcfg"
  	"tailscale.com/tstime"
-@@ -55,6 +57,169 @@
+@@ -55,6 +57,184 @@
  
  var stdDialer net.Dialer
  
@@ -28,6 +28,7 @@ index 06a2131fd..87ece53f8 100644
 +type safeNetConn struct {
 +	net.Conn
 +	closed atomic.Bool
++	logf   func(string, ...any)
 +}
 +
 +func (c *safeNetConn) markClosed() {
@@ -40,6 +41,9 @@ index 06a2131fd..87ece53f8 100644
 +	}
 +	defer func() {
 +		if r := recover(); r != nil {
++			if c.logf != nil {
++				c.logf("[safeNetConn] panic in Read: %v", r)
++			}
 +			err = io.ErrUnexpectedEOF
 +		}
 +	}()
@@ -52,6 +56,9 @@ index 06a2131fd..87ece53f8 100644
 +	}
 +	defer func() {
 +		if r := recover(); r != nil {
++			if c.logf != nil {
++				c.logf("[safeNetConn] panic in Write: %v", r)
++			}
 +			err = io.ErrUnexpectedEOF
 +		}
 +	}()
@@ -76,6 +83,14 @@ index 06a2131fd..87ece53f8 100644
 +	wsConn *websocket.Conn,
 +	logf func(string, ...any),
 +) {
++	// Initial random delay of 1–5 seconds to avoid ping failure immediately after dialing
++	delay := time.Duration(1+rand.Intn(5)) * time.Second
++	select {
++	case <-ctx.Done():
++		return
++	case <-time.After(delay):
++	}
++
 +	ticker := time.NewTicker(30 * time.Second)
 +	defer ticker.Stop()
 +
@@ -167,7 +182,7 @@ index 06a2131fd..87ece53f8 100644
 +
 +	// Adapt to net.Conn and add panic protection
 +	netConn := wsconn.NetConn(connCtx, wsConn, websocket.MessageBinary, wsURL.String())
-+	safeConn := &safeNetConn{Conn: netConn}
++	safeConn := &safeNetConn{Conn: netConn, logf: a.logf,}
 +
 +	// Complete Noise handshake
 +	cbConn, err := cont(ctx, safeConn)
@@ -188,7 +203,7 @@ index 06a2131fd..87ece53f8 100644
  // Dial connects to the HTTP server at this Dialer's Host:HTTPPort, requests to
  // switch to the Tailscale control protocol, and returns an established control
  // protocol connection.
-@@ -237,6 +402,14 @@ func (a *Dialer) dialHost(ctx context.Context) (*ClientConn, error) {
+@@ -237,6 +417,14 @@ func (a *Dialer) dialHost(ctx context.Context) (*ClientConn, error) {
  // If optAddr is valid, then no DNS is used and the connection will be made to the
  // provided address.
  func (a *Dialer) dialHostOpt(ctx context.Context, optAddr netip.Addr, optACEHost string) (*ClientConn, error) {
@@ -204,7 +219,7 @@ index 06a2131fd..87ece53f8 100644
  	// If port 80 is still in flight when 443 returns, this deferred cancel
  	// will stop the port 80 dial.
 diff --git a/control/controlhttp/client_common.go b/control/controlhttp/client_common.go
-index dd94e93cd..a80583a6d 100644
+index dd94e93cd..a255cf396 100644
 --- a/control/controlhttp/client_common.go
 +++ b/control/controlhttp/client_common.go
 @@ -14,4 +14,6 @@
@@ -212,5 +227,5 @@ index dd94e93cd..a80583a6d 100644
  	// Conn is the noise connection.
  	*controlbase.Conn
 +	stopHeartbeat func()
-+	safeConn			*safeNetConn
++	safeConn    *safeNetConn
  }
