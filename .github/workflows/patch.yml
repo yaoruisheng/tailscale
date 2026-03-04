@@ -36,10 +36,8 @@ jobs:
         echo "Applying custom patches..."
         # 使用 -p1 模式应用补丁
         # 假设补丁文件在你自己仓库的 patches/ 目录下
-        # patch -p1 --verbose --ignore-whitespace < tmp_patches/patches/force_standard_websocket.patch
-        rm control/controlhttp/client.go
-        mv control/controlhttp/client_js.go control/controlhttp/client.go
-        
+        patch -p1 --verbose --ignore-whitespace < tmp_patches/patches/force_standard_websocket.patch
+
         # 清理临时目录
         rm -rf tmp_patches
         echo "Patches applied successfully."
