@@ -1,5 +1,5 @@
 diff --git a/control/controlhttp/client.go b/control/controlhttp/client.go
-index 06a2131fd..e2ef8223b 100644
+index 06a2131fd..87ece53f8 100644
 --- a/control/controlhttp/client.go
 +++ b/control/controlhttp/client.go
 @@ -36,6 +36,7 @@
@@ -18,7 +18,7 @@ index 06a2131fd..e2ef8223b 100644
  	"tailscale.com/syncs"
  	"tailscale.com/tailcfg"
  	"tailscale.com/tstime"
-@@ -55,6 +57,168 @@
+@@ -55,6 +57,169 @@
  
  var stdDialer net.Dialer
  
@@ -70,7 +70,12 @@ index 06a2131fd..e2ef8223b 100644
 +
 +// Keep-alive function essential for Android/mobile networks.
 +// It proactively closes the connection on failure to trigger reconnection logic.
-+func keepAlive(ctx context.Context, wsConn *websocket.Conn, logf func(string, ...any)) {
++func keepAlive(
++	ctx context.Context,
++	stopHeartbeat context.CancelFunc,
++	wsConn *websocket.Conn,
++	logf func(string, ...any),
++) {
 +	ticker := time.NewTicker(30 * time.Second)
 +	defer ticker.Stop()
 +
@@ -82,20 +87,16 @@ index 06a2131fd..e2ef8223b 100644
 +			}
 +			return
 +		case <-ticker.C:
-+			// Use a shorter timeout for the Ping operation itself to detect "half-open" connections.
 +			pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 +			err := wsConn.Ping(pingCtx)
 +			cancel()
 +
 +			if err != nil {
 +				if logf != nil {
-+					logf("[v2] controlhttp: websocket keepalive ping failed: %v. Initiating active shutdown.", err)
++					logf("[v2] controlhttp: websocket keepalive ping failed: %v. Cancelling conn.", err)
 +				}
-+				// Active shutdown: this will cause any pending Read/Write calls in the 
-+				// transport layer to fail immediately with an error, allowing the 
-+				// high-level dialer to restart the connection process.
-+				wsConn.Close(websocket.StatusPolicyViolation, "keepalive failed")
-+				return // Terminate the goroutine after closing the connection.
++				stopHeartbeat()
++				return
 +			}
 +		}
 +	}
@@ -162,10 +163,10 @@ index 06a2131fd..e2ef8223b 100644
 +	}()
 +
 +	// Start heartbeat (attached to connCtx rather than the ephemeral dialing ctx)
-+	go keepAlive(connCtx, wsConn, a.logf)
++	go keepAlive(connCtx, stopHeartbeat, wsConn, a.logf)
 +
 +	// Adapt to net.Conn and add panic protection
-+	netConn := wsconn.NetConn(ctx, wsConn, websocket.MessageBinary, wsURL.String())
++	netConn := wsconn.NetConn(connCtx, wsConn, websocket.MessageBinary, wsURL.String())
 +	safeConn := &safeNetConn{Conn: netConn}
 +
 +	// Complete Noise handshake
@@ -187,7 +188,7 @@ index 06a2131fd..e2ef8223b 100644
  // Dial connects to the HTTP server at this Dialer's Host:HTTPPort, requests to
  // switch to the Tailscale control protocol, and returns an established control
  // protocol connection.
-@@ -237,6 +401,14 @@ func (a *Dialer) dialHost(ctx context.Context) (*ClientConn, error) {
+@@ -237,6 +402,14 @@ func (a *Dialer) dialHost(ctx context.Context) (*ClientConn, error) {
  // If optAddr is valid, then no DNS is used and the connection will be made to the
  // provided address.
  func (a *Dialer) dialHostOpt(ctx context.Context, optAddr netip.Addr, optACEHost string) (*ClientConn, error) {
