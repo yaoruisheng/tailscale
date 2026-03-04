@@ -1,16 +1,19 @@
 diff --git a/control/controlhttp/client.go b/control/controlhttp/client.go
-index 06a2131fd..826666b15 100644
+index 06a2131fd..822a65783 100644
 --- a/control/controlhttp/client.go
 +++ b/control/controlhttp/client.go
-@@ -36,6 +36,7 @@
+@@ -34,8 +34,10 @@
+ 	"net/url"
+ 	"runtime"
  	"sync/atomic"
++	"math/rand"
  	"time"
  
 +	"github.com/coder/websocket"
  	"tailscale.com/control/controlbase"
  	"tailscale.com/control/controlhttp/controlhttpcommon"
  	"tailscale.com/envknob"
-@@ -48,6 +49,7 @@
+@@ -48,6 +50,7 @@
  	"tailscale.com/net/netx"
  	"tailscale.com/net/sockstats"
  	"tailscale.com/net/tlsdial"
@@ -18,7 +21,7 @@ index 06a2131fd..826666b15 100644
  	"tailscale.com/syncs"
  	"tailscale.com/tailcfg"
  	"tailscale.com/tstime"
-@@ -55,6 +57,184 @@
+@@ -55,6 +58,184 @@
  
  var stdDialer net.Dialer
  
@@ -203,7 +206,7 @@ index 06a2131fd..826666b15 100644
  // Dial connects to the HTTP server at this Dialer's Host:HTTPPort, requests to
  // switch to the Tailscale control protocol, and returns an established control
  // protocol connection.
-@@ -237,6 +417,14 @@ func (a *Dialer) dialHost(ctx context.Context) (*ClientConn, error) {
+@@ -237,6 +418,14 @@ func (a *Dialer) dialHost(ctx context.Context) (*ClientConn, error) {
  // If optAddr is valid, then no DNS is used and the connection will be made to the
  // provided address.
  func (a *Dialer) dialHostOpt(ctx context.Context, optAddr netip.Addr, optACEHost string) (*ClientConn, error) {
