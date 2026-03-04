@@ -1,5 +1,5 @@
 diff --git a/control/controlhttp/client.go b/control/controlhttp/client.go
-index 06a2131fd..3f28588d5 100644
+index 06a2131fd..9e71d4d32 100644
 --- a/control/controlhttp/client.go
 +++ b/control/controlhttp/client.go
 @@ -36,6 +36,7 @@
@@ -78,11 +78,13 @@ index 06a2131fd..3f28588d5 100644
  // Dial connects to the HTTP server at this Dialer's Host:HTTPPort, requests to
  // switch to the Tailscale control protocol, and returns an established control
  // protocol connection.
-@@ -272,7 +327,11 @@ type tryURLRes struct {
+@@ -272,7 +327,13 @@ type tryURLRes struct {
  		if debugNoiseDial() {
  			a.logf("trying noise dial (%v, %v) ...", u, cmp.Or(optACEHost, optAddr.String()))
  		}
 -		cbConn, err := a.dialURL(ctx, u, optAddr, optACEHost)
++		var cbConn *ClientConn
++		var err error
 +		if forceWebSocket() {
 +			cbConn, err = a.dialWebSocketURL(ctx, u, optAddr, optACEHost)
 +		} else {
