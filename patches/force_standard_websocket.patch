@@ -1,5 +1,5 @@
 diff --git a/control/controlhttp/client.go b/control/controlhttp/client.go
-index e81209174..3bb74f7c3 100644
+index e81209174..04174151e 100644
 --- a/control/controlhttp/client.go
 +++ b/control/controlhttp/client.go
 @@ -36,6 +36,7 @@
@@ -67,7 +67,7 @@ index e81209174..3bb74f7c3 100644
 +		return nil, err
 +	}
 +
-+	raw := websocket.NetConn(context.Background(), wsConn, websocket.MessageBinary)
++	raw := wsconn.NetConn(context.Background(), wsConn, websocket.MessageBinary)
 +
 +	handshakeCtx, handshakeCancel := context.WithTimeout(dialCtx, 15*time.Second)
 +	defer handshakeCancel()
