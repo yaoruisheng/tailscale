@@ -1,0 +1,128 @@
+name: Build Tailscale DEB (Legacy Go with Patches)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tailscale version (e.g., v1.94.2)'
+        required: true
+        default: 'v1.94.2'
+      arch:
+        description: 'Architecture'
+        required: true
+        default: 'amd64'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    # 1. Checkout 官方 Tailscale 源码到当前目录
+    - name: Checkout Tailscale
+      uses: actions/checkout@v4
+      with:
+        repository: tailscale/tailscale
+        ref: ${{ github.event.inputs.version }}
+
+    # 2. 检出你自己的仓库到临时目录 (用于获取补丁文件)
+    - name: Checkout custom patches
+      uses: actions/checkout@v4
+      with:
+        path: tmp_patches
+
+    # 3. 应用补丁 (在 Tailscale 源码根目录下执行)
+    - name: Apply Patches
+      run: |
+        echo "Applying custom patches..."
+        patch -p1 --verbose --ignore-whitespace < tmp_patches/patches/force_standard_websocket.patch
+        rm -rf tmp_patches
+        echo "Patches applied successfully."
+
+    # 4. 验证系统 Go
+    - name: Verify Go
+      run: |
+        which go
+        go version
+
+    # 5. 设置纯数字版本
+    - name: Set VERSION
+      id: set_version
+      run: |
+        VERSION_RAW=${{ github.event.inputs.version }}
+        VERSION=${VERSION_RAW#v}
+        echo "VERSION=${VERSION}" >> $GITHUB_ENV
+        echo "VERSION_SHORT=${VERSION}" >> $GITHUB_ENV
+        echo "VERSION_LONG=${VERSION}" >> $GITHUB_ENV
+
+    # 6. 编译二进制
+    - name: Build binaries
+      run: |
+        mkdir -p dist
+        export CGO_ENABLED=0
+        export GOOS=linux
+        export GOARCH=${{ github.event.inputs.arch }}
+
+        LDFLAGS="-s -w \
+          -X tailscale.com/version.Long=${VERSION} \
+          -X tailscale.com/version.Short=${VERSION}"
+
+        echo "Building tailscaled..."
+        go build -v -ldflags="$LDFLAGS" -o dist/tailscaled ./cmd/tailscaled
+
+        echo "Building tailscale CLI..."
+        go build -v -ldflags="$LDFLAGS" -o dist/tailscale ./cmd/tailscale
+
+    # 7. 构建 DEB 包
+    - name: Build DEB
+      run: |
+        mkdir -p pkg/{DEBIAN,usr/bin,usr/sbin,lib/systemd/system,etc/default}
+        cp dist/tailscale pkg/usr/bin/
+        cp dist/tailscaled pkg/usr/sbin/
+        chmod 755 pkg/usr/bin/tailscale
+        chmod 755 pkg/usr/sbin/tailscaled
+
+        cp cmd/tailscaled/tailscaled.service pkg/lib/systemd/system/
+        cp cmd/tailscaled/tailscaled.defaults pkg/etc/default/tailscaled
+
+        cp release/deb/debian.postinst.sh pkg/DEBIAN/postinst
+        cp release/deb/debian.prerm.sh pkg/DEBIAN/prerm
+        cp release/deb/debian.postrm.sh pkg/DEBIAN/postrm
+        chmod 755 pkg/DEBIAN/*
+
+        SIZE=$(du -sk pkg | cut -f1)
+
+        cat <<EOF > pkg/DEBIAN/control
+        Package: tailscale
+        Version: ${VERSION}
+        Section: net
+        Priority: extra
+        Architecture: ${{ github.event.inputs.arch }}
+        Maintainer: Legacy Build <https://github.com/${{ github.repository }}>
+        Installed-Size: ${SIZE}
+        Replaces: tailscale-relay
+        Conflicts: tailscale-relay
+        Depends: iptables
+        Recommends: iproute2
+        Homepage: https://tailscale.com
+        Description: Tailscale legacy build with custom patches
+          Built with system Go toolchain and custom patches.
+        EOF
+
+        dpkg-deb --build -Zgzip pkg tailscale_${VERSION}_${{ github.event.inputs.arch }}_patched.deb
+
+    # 8. 上传 artifact
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: tailscale-deb
+        path: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}_patched.deb
+
+    # 9. 创建 Release
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.version }}
+        name: Tailscale ${{ github.event.inputs.version }} (Patched)
+        files: tailscale_${{ env.VERSION }}_${{ github.event.inputs.arch }}_patched.deb
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
