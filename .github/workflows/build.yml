@@ -1,4 +1,4 @@
-name: Build Tailscale DEB (Legacy Go with Patches)
+name: Build Tailscale DEB (Official Go with Patches)
 
 on:
   workflow_dispatch:
